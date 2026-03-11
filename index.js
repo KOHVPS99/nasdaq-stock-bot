@@ -2,8 +2,7 @@ require("dotenv").config();
 
 const fs = require("fs");
 const path = require("path");
-const { Client, Collection, GatewayIntentBits, Events } = require("discord.js");
-const { processAlerts } = require("./utils/tracker");
+const { Client, GatewayIntentBits, Collection, REST, Routes } = require("discord.js");
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
@@ -11,37 +10,52 @@ const client = new Client({
 
 client.commands = new Collection();
 
+const commands = [];
+
 const commandsPath = path.join(__dirname, "commands");
-const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith(".js"));
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
 
 for (const file of commandFiles) {
+
   const command = require(`./commands/${file}`);
+
   client.commands.set(command.data.name, command);
+
+  commands.push(command.data.toJSON());
 }
 
-client.once(Events.ClientReady, () => {
-  console.log(`Bot ready: ${client.user.tag}`);
+async function deployCommands() {
 
-  setInterval(() => {
-    processAlerts(client);
-  }, Number(process.env.CHECK_INTERVAL_MS || 5000));
+  const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
+
+  await rest.put(
+    Routes.applicationGuildCommands(
+      process.env.DISCORD_CLIENT_ID,
+      process.env.DISCORD_GUILD_ID
+    ),
+    { body: commands }
+  );
+
+  console.log("Commands deployed");
+}
+
+client.once("ready", async () => {
+
+  console.log(`Logged in as ${client.user.tag}`);
+
+  await deployCommands();
+
 });
 
-client.on(Events.InteractionCreate, async interaction => {
+client.on("interactionCreate", async interaction => {
 
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
 
-  try {
-    await command.execute(interaction);
-  } catch (error) {
-    console.error(error);
-    await interaction.reply({
-      content: "Error running command.",
-      ephemeral: true
-    });
-  }
+  if (!command) return;
+
+  await command.execute(interaction);
 
 });
 
