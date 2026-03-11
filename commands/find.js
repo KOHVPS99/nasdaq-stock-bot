@@ -2,7 +2,9 @@ const { SlashCommandBuilder } = require("discord.js");
 const { getPrice } = require("../services/finnhub");
 
 const tickers = [
-"AAPL","TSLA","NVDA","AMD","BBAI","SOFI","NVTS","SERV","MSFT","META"
+"AAPL","TSLA","NVDA","AMD","MSFT","META","BBAI","SOFI",
+"PLTR","NVTS","SERV","INTC","MU","COIN","ROKU","RIVN",
+"LCID","HOOD","AFRM","UPST"
 ];
 
 module.exports = {
@@ -16,19 +18,20 @@ option.setName("price")
 .setRequired(true))
 .addStringOption(option =>
 option.setName("type")
-.setDescription("Higher or Lower")
+.setDescription("Search type")
 .setRequired(true)
 .addChoices(
-{ name:"higher", value:"higher" },
-{ name:"lower", value:"lower" }
-)),
+{ name: "higher", value: "higher" },
+{ name: "lower", value: "lower" }
+)
+),
 
 async execute(interaction){
 
 const price = interaction.options.getNumber("price");
 const type = interaction.options.getString("type");
 
-await interaction.reply("Scanning stocks...");
+await interaction.reply("🔎 Scanning stocks...");
 
 let results = [];
 
@@ -38,26 +41,35 @@ try{
 
 const stockPrice = await getPrice(ticker);
 
-if(type === "higher" && stockPrice > price)
-results.push(`${ticker} — $${stockPrice} USD`);
+if(!stockPrice) continue;
 
-if(type === "lower" && stockPrice < price)
+if(type === "higher" && stockPrice > price){
 results.push(`${ticker} — $${stockPrice} USD`);
+}
 
-}catch(e){}
+if(type === "lower" && stockPrice < price){
+results.push(`${ticker} — $${stockPrice} USD`);
+}
+
+}catch(err){}
 
 }
 
 if(results.length === 0){
-return interaction.editReply("No stocks found.");
+
+return interaction.editReply(
+`No stocks found ${type} than $${price} USD`
+);
+
 }
 
 interaction.editReply(
 
-`📊 Stocks **${type} than $${price} USD**:\n\n` +
+`📊 Stocks ${type} than $${price} USD\n\n` +
 results.join("\n")
 
 );
 
 }
+
 };
