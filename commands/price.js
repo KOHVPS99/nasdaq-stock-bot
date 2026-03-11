@@ -1,34 +1,30 @@
 const { SlashCommandBuilder } = require("discord.js");
-const axios = require("axios");
+const { getPrice } = require("../services/finnhub");
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName("price")
-    .setDescription("Get stock price")
-    .addStringOption(option =>
-      option.setName("symbol")
-        .setDescription("Stock ticker")
-        .setRequired(true)
-    ),
 
-  async execute(interaction) {
-    const symbol = interaction.options.getString("symbol").toUpperCase();
+data: new SlashCommandBuilder()
+.setName("price")
+.setDescription("Get stock price in USD")
+.addStringOption(option =>
+option.setName("symbol")
+.setDescription("Stock ticker")
+.setRequired(true)),
 
-    const res = await axios.get(
-      `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${process.env.FINNHUB_API_KEY}`
-    );
+async execute(interaction){
 
-    const data = res.data;
+const symbol = interaction.options.getString("symbol").toUpperCase();
 
-    if (!data.c || data.c === 0) {
-      return interaction.reply({
-        content: `❌ ${symbol} is not a valid stock.`,
-        ephemeral: true
-      });
-    }
+const price = await getPrice(symbol);
 
-    await interaction.reply(
-      `📈 **${symbol}** price: **$${data.c}**`
-    );
-  }
+if(!price){
+return interaction.reply({
+content:`❌ Stock not found.`,
+ephemeral:true
+});
+}
+
+interaction.reply(`📈 **${symbol}** price: **$${price} USD**`);
+
+}
 };
