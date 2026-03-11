@@ -1,23 +1,28 @@
 const fs = require("fs");
 
-const file = "./data/alerts.json";
+const FILE = "./data/alerts.json";
 
-function load(){
-return JSON.parse(fs.readFileSync(file));
+function loadAlerts() {
+
+  if (!fs.existsSync(FILE)) {
+    fs.writeFileSync(FILE, "[]");
+  }
+
+  return JSON.parse(fs.readFileSync(FILE));
 }
 
-function save(data){
-fs.writeFileSync(file, JSON.stringify(data,null,2));
+function saveAlerts(alerts) {
+  fs.writeFileSync(FILE, JSON.stringify(alerts, null, 2));
 }
 
-function addAlert(alert){
+function addAlert(alert) {
 
-const alerts = load();
+  const alerts = loadAlerts();
 
-alerts.push(alert);
+  alerts.push(alert);
 
-save(alerts);
+  saveAlerts(alerts);
 
 }
 
-module.exports = { addAlert, load, save };
+module.exports = { loadAlerts, saveAlerts, addAlert };
