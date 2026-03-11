@@ -1,70 +1,28 @@
-const { getQuote } = require("../services/finnhub");
-const { getAlerts, removeAlertById } = require("./storage");
+const { load, save } = require("./storage");
+const { getPrice } = require("../services/finnhub");
 
-let isRunning = false;
+async function processAlerts(client){
 
-async function processAlerts(client) {
-  if (isRunning) return;
-  isRunning = true;
+const alerts = load();
 
-  try {
-    const alerts = getAlerts();
-    if (!alerts.length) return;
+for(const alert of alerts){
 
-    // Avoid duplicate quote calls for same symbol in the same cycle
-    const uniqueSymbols = [...new Set(alerts.map((a) => a.symbol))];
-    const quoteMap = new Map();
+const price = await getPrice(alert.symbol);
 
-    for (const symbol of uniqueSymbols) {
-      try {
-        const quote = await getQuote(symbol);
-        quoteMap.set(symbol, quote);
-      } catch (err) {
-        console.error(`Quote fetch failed for ${symbol}:`, err.message);
-      }
-    }
+if(!price) continue;
 
-    for (const alert of alerts) {
-      const quote = quoteMap.get(alert.symbol);
-      if (!quote) continue;
+if(alert.targetType === "sell" && price >= alert.targetPrice){
 
-      const current = quote.current;
-      let hit = false;
+const channel = await client.channels.fetch(alert.channelId);
 
-      if (alert.targetType === "sell" && current >= alert.targetPrice) {
-        hit = true;
-      }
+channel.send(
+`🚨 <@${alert.userId}> ${alert.symbol} hit **$${price} USD**`
+);
 
-      if (alert.targetType === "buy" && current <= alert.targetPrice) {
-        hit = true;
-      }
-
-      if (!hit) continue;
-
-      try {
-        const channel = await client.channels.fetch(alert.channelId);
-        if (!channel || !channel.isTextBased()) continue;
-
-        await channel.send({
-          content:
-            `🚨 **PRICE ALERT**\n\n` +
-            `<@${alert.userId}>\n` +
-            `**${alert.symbol}** hit your **${alert.targetType.toUpperCase()}** target.\n` +
-            `Target: **$${alert.targetPrice.toFixed(2)}**\n` +
-            `Current: **$${current.toFixed(2)}**`
-        });
-
-        // Remove after trigger so it only fires once
-        removeAlertById(alert.id);
-      } catch (err) {
-        console.error(`Failed to send alert for ${alert.symbol}:`, err.message);
-      }
-    }
-  } finally {
-    isRunning = false;
-  }
 }
 
-module.exports = {
-  processAlerts
-};
+}
+
+}
+
+module.exports = { processAlerts };
