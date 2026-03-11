@@ -2,15 +2,8 @@ require("dotenv").config();
 
 const fs = require("fs");
 const path = require("path");
-const { Client, Collection, GatewayIntentBits, Events } = require("discord.js");
+const { Client, Collection, GatewayIntentBits, Events, REST, Routes } = require("discord.js");
 const { processAlerts } = require("./utils/tracker");
-
-const token = process.env.DISCORD_TOKEN;
-const checkIntervalMs = Number(process.env.CHECK_INTERVAL_MS || 5000);
-
-if (!token) {
-  throw new Error("Missing DISCORD_TOKEN in environment variables.");
-}
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
@@ -18,8 +11,25 @@ const client = new Client({
 
 client.commands = new Collection();
 
+const token = process.env.DISCORD_TOKEN;
+const clientId = process.env.DISCORD_CLIENT_ID;
+const guildId = process.env.DISCORD_GUILD_ID;
+
+if (!token) {
+  throw new Error("Missing DISCORD_TOKEN");
+}
+
+if (!clientId) {
+  throw new Error("Missing DISCORD_CLIENT_ID");
+}
+
+if (!guildId) {
+  throw new Error("Missing DISCORD_GUILD_ID");
+}
+
+const commands = [];
 const commandsPath = path.join(__dirname, "commands");
-const commandFiles = fs.readdirSync(commandsPath).filter((file) => file.endsWith(".js"));
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
 
 for (const file of commandFiles) {
   const filePath = path.join(commandsPath, file);
@@ -27,23 +37,46 @@ for (const file of commandFiles) {
 
   if ("data" in command && "execute" in command) {
     client.commands.set(command.data.name, command);
+    commands.push(command.data.toJSON());
   } else {
-    console.warn(`[WARNING] The command at ${filePath} is missing "data" or "execute".`);
+    console.log(`Command ${file} missing data or execute`);
   }
 }
 
-client.once(Events.ClientReady, async (readyClient) => {
-  console.log(`Logged in as ${readyClient.user.tag}`);
+async function deployCommands() {
+  const rest = new REST({ version: "10" }).setToken(token);
+
+  try {
+    console.log("Deploying slash commands...");
+
+    await rest.put(
+      Routes.applicationGuildCommands(clientId, guildId),
+      { body: commands }
+    );
+
+    console.log("Slash commands deployed successfully.");
+  } catch (error) {
+    console.error("Command deploy failed:", error);
+  }
+}
+
+client.once(Events.ClientReady, async () => {
+  console.log(`Bot online as ${client.user.tag}`);
+
+  await deployCommands();
+
+  const interval = Number(process.env.CHECK_INTERVAL_MS || 5000);
 
   setInterval(async () => {
     await processAlerts(client);
-  }, checkIntervalMs);
+  }, interval);
 });
 
-client.on(Events.InteractionCreate, async (interaction) => {
+client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
-  const command = interaction.client.commands.get(interaction.commandName);
+  const command = client.commands.get(interaction.commandName);
+
   if (!command) return;
 
   try {
@@ -51,11 +84,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
   } catch (error) {
     console.error(error);
 
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply("❌ There was an error while executing this command.");
+    if (interaction.replied || interaction.deferred) {
+      await interaction.editReply("There was an error executing this command.");
     } else {
       await interaction.reply({
-        content: "❌ There was an error while executing this command.",
+        content: "There was an error executing this command.",
         ephemeral: true
       });
     }
